@@ -59,7 +59,7 @@ const createDirectory = (dir) => {
           const imageUrls = [];
           for (const img of images) {
             const src = await page.evaluate(i => i.src, img);
-            imageUrls.push(src.replace('name=small', 'name=large')); // 高画質化
+            imageUrls.push(src.replace(/name=\w+$/, 'name=orig')); // オリジナル画像
           }
 
           posts.push({
