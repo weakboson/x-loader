@@ -14,7 +14,7 @@ const createDirectory = (dir) => {
 
 (async () => {
   // Puppeteerを起動
-  const browser = await puppeteer.launch({ headless: false }); // 動作確認のためheadless: falseにしています
+  const browser = await puppeteer.launch({ headless: true }); // 動作確認のためheadless: falseにしています
   const page = await browser.newPage();
 
   // 認証クッキーを設定
@@ -65,8 +65,7 @@ const createDirectory = (dir) => {
           posts.push({
             postId,
             userName,
-            imageUrls,
-            articleElement: article // ブックマーク削除のために要素を保持
+            imageUrls
           });
         }
       } catch (error) {
@@ -104,18 +103,19 @@ const createDirectory = (dir) => {
     }
 
     // ブックマークを削除
-    // try {
-    //     const bookmarkButton = await post.articleElement.$('button[data-testid="removeBookmark"]');
-    //     if (bookmarkButton) {
-    //         await bookmarkButton.click();
-    //         console.log(`ポストID ${post.postId} のブックマークを削除しました。`);
-    //         await new Promise(resolve => setTimeout(resolve, 500)); // 削除処理の待ち時間
-    //     } else {
-    //         console.log(`ポストID ${post.postId} のブックマーク削除ボタンが見つかりませんでした。`);
-    //     }
-    // } catch (error) {
-    //     console.error(`ブックマークの削除中にエラーが発生しました: ${post.postId}`, error);
-    // }
+    try {
+        // DOM要素が切断されている可能性があるため、セレクタで再取得
+        const bookmarkButton = await page.$(`article:has(a[href*="${post.postId}"]) button[data-testid="removeBookmark"]`);
+        if (bookmarkButton) {
+            await bookmarkButton.click();
+            console.log(`ポストID ${post.postId} のブックマークを削除しました。`);
+            await new Promise(resolve => setTimeout(resolve, 500)); // 削除処理の待ち時間
+        } else {
+            console.log(`ポストID ${post.postId} のブックマーク削除ボタンが見つかりませんでした。`);
+        }
+    } catch (error) {
+        console.error(`ブックマークの削除中にエラーが発生しました: ${post.postId}`, error);
+    }
   }
 
   await browser.close();
