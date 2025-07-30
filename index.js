@@ -30,16 +30,16 @@ const createDirectory = (dir) => {
 
   console.log('ブックマークページに移動しました。');
 
-  // ポストの情報を格納する配列
-  const posts = [];
+  // 処理済みポスト数をカウント
+  let processedCount = 0;
 
-  // 指定した数のポストを取得
-  while (posts.length < config.post_count) {
+  // 指定した数のポストを取得・処理
+  while (processedCount < config.post_count) {
     // ページ上のポストを取得
     const articles = await page.$$('article[data-testid="tweet"]');
 
     for (const article of articles) {
-      if (posts.length >= config.post_count) {
+      if (processedCount >= config.post_count) {
         break;
       }
 
@@ -62,61 +62,57 @@ const createDirectory = (dir) => {
             imageUrls.push(src.replace(/name=\w+$/, 'name=orig')); // オリジナル画像
           }
 
-          posts.push({
-            postId,
-            userName,
-            imageUrls
-          });
+          // 画像をダウンロード
+          const userDirectory = path.join(config.download_directory, userName);
+          createDirectory(userDirectory);
+
+          for (let i = 0; i < imageUrls.length; i++) {
+            const imageUrl = imageUrls[i];
+            const fileName = `${postId}_${i + 1}.jpg`;
+            const filePath = path.join(userDirectory, fileName);
+
+            try {
+              const imagePage = await browser.newPage();
+              const response = await imagePage.goto(imageUrl);
+              const buffer = await response.buffer();
+              fs.writeFileSync(filePath, buffer);
+              console.log(`画像を保存しました: ${filePath}`);
+              await imagePage.close();
+            } catch (error) {
+              console.error(`画像のダウンロード中にエラーが発生しました: ${imageUrl}`, error);
+            }
+          }
+
+          // ブックマークを削除（画面に表示されている状態で）
+          try {
+            const bookmarkButton = await article.$('button[data-testid="removeBookmark"]');
+            if (bookmarkButton) {
+              await bookmarkButton.click();
+              console.log(`ポストID ${postId} のブックマークを削除しました。`);
+              await new Promise(resolve => setTimeout(resolve, 500)); // 削除処理の待ち時間
+            } else {
+              console.log(`ポストID ${postId} のブックマーク削除ボタンが見つかりませんでした。`);
+            }
+          } catch (error) {
+            console.error(`ブックマークの削除中にエラーが発生しました: ${postId}`, error);
+          }
+
+          processedCount++;
+          console.log(`処理完了: ${processedCount}/${config.post_count}`);
         }
       } catch (error) {
         // console.error('ポストの解析中にエラーが発生しました:', error);
       }
     }
 
-    // ページをスクロールして新しいポストを読み込む
-    await page.evaluate('window.scrollBy(0, window.innerHeight)');
-    await new Promise(resolve => setTimeout(resolve, 2000)); // 読み込み待ち
-  }
-
-  console.log(`${posts.length}件の画像付きポストを取得しました。`);
-
-  // 画像をダウンロード
-  for (const post of posts) {
-    const userDirectory = path.join(config.download_directory, post.userName);
-    createDirectory(userDirectory);
-
-    for (let i = 0; i < post.imageUrls.length; i++) {
-      const imageUrl = post.imageUrls[i];
-      const fileName = `${post.postId}_${i + 1}.jpg`;
-      const filePath = path.join(userDirectory, fileName);
-
-      try {
-        const imagePage = await browser.newPage();
-        const response = await imagePage.goto(imageUrl);
-        const buffer = await response.buffer();
-        fs.writeFileSync(filePath, buffer);
-        console.log(`画像を保存しました: ${filePath}`);
-        await imagePage.close();
-      } catch (error) {
-        console.error(`画像のダウンロード中にエラーが発生しました: ${imageUrl}`, error);
-      }
-    }
-
-    // ブックマークを削除
-    try {
-        // DOM要素が切断されている可能性があるため、セレクタで再取得
-        const bookmarkButton = await page.$(`article:has(a[href*="${post.postId}"]) button[data-testid="removeBookmark"]`);
-        if (bookmarkButton) {
-            await bookmarkButton.click();
-            console.log(`ポストID ${post.postId} のブックマークを削除しました。`);
-            await new Promise(resolve => setTimeout(resolve, 500)); // 削除処理の待ち時間
-        } else {
-            console.log(`ポストID ${post.postId} のブックマーク削除ボタンが見つかりませんでした。`);
-        }
-    } catch (error) {
-        console.error(`ブックマークの削除中にエラーが発生しました: ${post.postId}`, error);
+    // 指定数に達していない場合のみスクロール
+    if (processedCount < config.post_count) {
+      await page.evaluate('window.scrollBy(0, window.innerHeight)');
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 読み込み待ち
     }
   }
+
+  console.log(`${processedCount}件の画像付きポストを処理しました。`);
 
   await browser.close();
 })();
