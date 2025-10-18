@@ -32,6 +32,12 @@ const createDirectory = (dir) => {
 
   // 処理済みポスト数をカウント
   let processedCount = 0;
+  // 処理済みポストIDを追跡
+  const processedPostIds = new Set();
+  // スクロール前の処理済み数を記録
+  let previousProcessedCount = 0;
+  // 同じ数が続いた回数をカウント
+  let noNewPostsCount = 0;
 
   // 指定した数のポストを取得・処理
   while (processedCount < config.post_count) {
@@ -48,6 +54,11 @@ const createDirectory = (dir) => {
         const postLink = await article.$('a[href*="/status/"]');
         const href = await page.evaluate(a => a.href, postLink);
         const postId = href.split('/').pop();
+
+        // 既に処理済みのポストはスキップ
+        if (processedPostIds.has(postId)) {
+          continue;
+        }
 
         // ユーザー名を取得
         const userElement = await article.$('div[data-testid="User-Name"] a');
@@ -97,6 +108,8 @@ const createDirectory = (dir) => {
             console.error(`ブックマークの削除中にエラーが発生しました: ${postId}`, error);
           }
 
+          // 処理済みとしてマーク
+          processedPostIds.add(postId);
           processedCount++;
           console.log(`処理完了: ${processedCount}/${config.post_count}`);
         }
@@ -104,6 +117,19 @@ const createDirectory = (dir) => {
         // console.error('ポストの解析中にエラーが発生しました:', error);
       }
     }
+
+    // スクロール前に処理済み数をチェック
+    if (processedCount === previousProcessedCount) {
+      noNewPostsCount++;
+      // 2回連続で新しいポストが見つからない場合、終了
+      if (noNewPostsCount >= 2) {
+        console.log('新しい画像付きポストが見つかりませんでした。処理を終了します。');
+        break;
+      }
+    } else {
+      noNewPostsCount = 0; // リセット
+    }
+    previousProcessedCount = processedCount;
 
     // 指定数に達していない場合のみスクロール
     if (processedCount < config.post_count) {
